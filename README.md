@@ -13,6 +13,17 @@ The electronic configuration and code are now fully resolved. The wiring is comp
 
 ![The Hyphen Project](Image/IMG_7740.JPG)
 
+## Web Dashboard
+The project features a comprehensive Web Serial-based dashboard that allows for real-time interaction and telemetry monitoring without requiring an internet connection. 
+
+**Dashboard Capabilities:**
+- **Real-time Telemetry:** Live visualization of accelerometer data and hardware button state.
+- **Audio Control:** Dynamic MP3 streaming and playback control (Play/Pause/Volume).
+- **Display Management:** Remote updates for both the 16x2 LCD text and the round TFT background colors.
+- **Haptic Tuning:** Adjustable haptic intensity and manual vibration triggering.
+
+![The Hyphen Dashboard](Image/dashboard.png)
+
 ## Core Features
 - **Dual-State Haptics:** Powered by the DRV2605L driver, the device vibrates between unresolved states to simulate the "weight" of opposing forces.
 - **Interactive Visuals:** 
