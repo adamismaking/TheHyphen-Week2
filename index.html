@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ultimate ESP32-S3 Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg: #0d1117; --card: #161b22; --accent: #58a6ff; --text: #c9d1d9; --success: #238636; --danger: #f85149; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #30363d; text-align: center; }
+        .bubble-level { width: 180px; height: 180px; border: 4px solid var(--accent); border-radius: 50%; margin: 15px auto; position: relative; background: #000; overflow: hidden; }
+        .bubble { width: 30px; height: 30px; background: #ff7b72; border-radius: 50%; position: absolute; left: 75px; top: 75px; box-shadow: 0 0 15px #ff7b72; transition: 0.05s linear; }
+        .btn { padding: 10px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; color: white; }
+        .btn-blue { background: #1f6feb; }
+        input { background: #0d1117; border: 1px solid #30363d; color: white; padding: 10px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        #connectBtn { background: var(--success); padding: 15px 40px; margin-bottom: 25px; width: auto; display: block; margin-left: auto; margin-right: auto; }
+        .indicator { width: 60px; height: 60px; border-radius: 50%; background: #333; margin: 10px auto; }
+        .active { background: var(--danger); box-shadow: 0 0 20px var(--danger); }
+        .chart-box { height: 180px; width: 100%; margin-top: 15px; }
+        #log { font-family: monospace; font-size: 0.8rem; background: #000; padding: 10px; border-radius: 6px; margin-top: 20px; height: 60px; overflow-y: auto; color: #8b949e; border: 1px solid #30363d; }
+    </style>
+</head>
+<body>
+    <button id="connectBtn" class="btn">Connect Dashboard</button>
+    <div class="grid">
+        <!-- Motion Monitoring -->
+        <div class="card">
+            <h2>Live Motion Data</h2>
+            <div class="bubble-level"><div id="bubble" class="bubble"></div></div>
+            <div class="chart-box"><canvas id="accelChart"></canvas></div>
+        </div>
+
+        <!-- LCD & LED Control -->
+        <div class="card">
+            <h2>LCD & LED Control</h2>
+            <input type="text" id="l1" placeholder="LCD Line 1">
+            <input type="text" id="l2" placeholder="LCD Line 2">
+            <button onclick="sendLCD()" class="btn btn-blue">Update LCD Text</button>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="sendCMD({led:true})" class="btn" style="background: var(--success);">LED ON</button>
+                <button onclick="sendCMD({led:false})" class="btn" style="background: var(--danger);">LED OFF</button>
+            </div>
+        </div>
+
+        <!-- TFT Control -->
+        <div class="card">
+            <h2>TFT Display Circles</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="sendCMD({tft:'RED'})" class="btn" style="background: #ef4444;">RED</button>
+                <button onclick="sendCMD({tft:'BLUE'})" class="btn" style="background: #3b82f6;">BLUE</button>
+                <button onclick="sendCMD({tft:'GREEN'})" class="btn" style="background: #10b981;">GREEN</button>
+                <button onclick="sendCMD({tft:'CLEAR'})" class="btn" style="background: #6b7280;">CLEAR</button>
+            </div>
+            <p style="font-size: 0.8rem; opacity: 0.6; margin-top: 20px;">Draws filled circles on the round display</p>
+        </div>
+
+        <!-- Button Status -->
+        <div class="card">
+            <h2>Hardware Button</h2>
+            <div id="btnInd" class="indicator"></div>
+            <div id="pCount" style="font-size: 1.8rem; font-weight: bold; margin-top: 10px;">0</div>
+            <p>Presses Counted</p>
+        </div>
+
+        <!-- Haptics & Audio -->
+        <div class="card">
+            <h2>Haptics & Audio</h2>
+            <p style="font-size: 0.8rem; text-align: left; margin-bottom: 5px;">Haptic Intensity (0-255)</p>
+            <input type="range" id="hIntensity" min="0" max="255" value="150" style="width: 100%;">
+            <button onclick="sendHaptic()" class="btn btn-blue">Trigger Vibration</button>
+            
+            <hr style="border: 0; border-top: 1px solid #30363d; margin: 20px 0;">
+            
+            <p style="font-size: 0.8rem; text-align: left; margin-bottom: 5px;">Speaker Volume (0-21)</p>
+            <input type="range" id="aVol" min="0" max="21" value="12" style="width: 100%;" onchange="sendVol()">
+            
+            <input type="text" id="aUrl" placeholder="MP3 Stream URL" style="margin-top: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="sendPlay()" class="btn" style="background: var(--success);">Play Audio</button>
+                <button onclick="sendCMD({play:'DOOM'})" class="btn" style="background: #9333ea;">Play Local</button>
+            </div>
+            <button onclick="sendCMD({pause:true})" class="btn" style="background: #f59e0b; margin-top: 10px;">Pause / Resume</button>
+        </div>
+    </div>
+    <div id="log">Command Log: Waiting for connection...</div>
+
+    <script>
+        let port;
+        let writer;
+        const maxPoints = 50;
+
+        // Setup Charts
+        const accelCtx = document.getElementById('accelChart').getContext('2d');
+        const accelChart = new Chart(accelCtx, {
+            type: 'line',
+            data: { labels: Array(maxPoints).fill(''), datasets: [
+                { label: 'AX', data: [], borderColor: 'red', tension: 0.3, pointRadius: 0 },
+                { label: 'AY', data: [], borderColor: 'green', tension: 0.3, pointRadius: 0 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { grid: { color: '#30363d' } } }, plugins: { legend: { labels: { color: '#8b949e' } } } }
+        });
+
+        document.getElementById('connectBtn').onclick = async () => {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+            document.getElementById('connectBtn').innerText = "DASHBOARD ONLINE";
+            document.getElementById('connectBtn').style.background = "#6b7280";
+            readLoop();
+        };
+
+        async function readLoop() {
+            const decoder = new TextDecoderStream();
+            port.readable.pipeTo(decoder.writable);
+            const reader = decoder.readable.getReader();
+            let buffer = "";
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += value;
+                let lines = buffer.split("\n");
+                buffer = lines.pop();
+                for (let line of lines) {
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.log) {
+                            const logDiv = document.getElementById('log');
+                            logDiv.innerText = data.log;
+                            logDiv.scrollTop = logDiv.scrollHeight;
+                        } else {
+                            // Update Visuals
+                            let bx = 75 + (data.ax * 7);
+                            let by = 75 + (data.ay * 7);
+                            document.getElementById('bubble').style.left = `${bx}px`;
+                            document.getElementById('bubble').style.top = `${by}px`;
+                            document.getElementById('btnInd').className = data.pressed ? 'indicator active' : 'indicator';
+                            document.getElementById('pCount').innerText = data.count;
+
+                            // Update Graph
+                            accelChart.data.datasets[0].data.push(data.ax);
+                            accelChart.data.datasets[1].data.push(data.ay);
+                            if (accelChart.data.datasets[0].data.length > maxPoints) {
+                                accelChart.data.datasets[0].data.shift();
+                                accelChart.data.datasets[1].data.shift();
+                            }
+                            accelChart.update();
+                        }
+                    } catch (e) {}
+                }
+            }
+        }
+
+        async function sendCMD(obj) {
+            if (!port || !port.writable) return;
+            const textEncoder = new TextEncoder();
+            const writer = port.writable.getWriter();
+            await writer.write(textEncoder.encode(JSON.stringify(obj) + "\n"));
+            writer.releaseLock();
+        }
+
+        function sendLCD() {
+            sendCMD({ lcd1: document.getElementById('l1').value, lcd2: document.getElementById('l2').value });
+        }
+
+        function sendHaptic() {
+            const val = parseInt(document.getElementById('hIntensity').value);
+            sendCMD({ haptic: val });
+        }
+
+        function sendVol() {
+            const val = parseInt(document.getElementById('aVol').value);
+            sendCMD({ vol: val });
+        }
+
+        function sendPlay() {
+            const url = document.getElementById('aUrl').value;
+            if (url) sendCMD({ play: url });
+        }
+    </script>
+</body>
+</html>
