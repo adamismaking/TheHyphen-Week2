@@ -3,6 +3,16 @@
 ## What is it?
 **The Hyphen** is a handheld haptic interface and interactive display system built on the ESP32-S3. It is designed to simulate the tension and weight between two unresolved states. The project uses tactile feedback, a dual-bus display system, and motion sensing to represent two abstract worlds pulling apart.
 
+## Current Project State
+The electronic configuration and code are now fully resolved. The wiring is complete and functional, and all sensors, displays, and haptic systems are successfully integrated via a dual-bus I2C architecture.
+
+**Next Steps:**
+- Refining and optimizing the code logic.
+- Finalizing the physical body and case design.
+- Fabricating and resolving the handheld enclosure.
+
+![The Hyphen Project](Image/IMG_7740.JPG)
+
 ## Core Features
 - **Dual-State Haptics:** Powered by the DRV2605L driver, the device vibrates between unresolved states to simulate the "weight" of opposing forces.
 - **Interactive Visuals:** 
